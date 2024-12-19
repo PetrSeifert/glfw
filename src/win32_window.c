@@ -28,6 +28,7 @@
 //========================================================================
 
 #include "internal.h"
+#include "../../../../VoxelicousEngine/src/Core/UIAccess.h"
 
 #if defined(_GLFW_WIN32)
 
@@ -1333,16 +1334,50 @@ static int createNativeWindow(_GLFWwindow* window,
     if (!wideTitle)
         return GLFW_FALSE;
 
-    window->win32.handle = CreateWindowExW(exStyle,
-                                           MAKEINTATOM(_glfw.win32.mainWindowClass),
-                                           wideTitle,
-                                           style,
-                                           frameX, frameY,
-                                           frameWidth, frameHeight,
-                                           NULL, // No parent window
-                                           NULL, // No window menu
-                                           _glfw.win32.instance,
-                                           (LPVOID) wndconfig);
+    enum ZBID
+    {
+        ZBID_DEFAULT = 0,
+        ZBID_DESKTOP = 1,
+        ZBID_UIACCESS = 2,
+        ZBID_IMMERSIVE_IHM = 3,
+        ZBID_IMMERSIVE_NOTIFICATION = 4,
+        ZBID_IMMERSIVE_APPCHROME = 5,
+        ZBID_IMMERSIVE_MOGO = 6,
+        ZBID_IMMERSIVE_EDGY = 7,
+        ZBID_IMMERSIVE_INACTIVEMOBODY = 8,
+        ZBID_IMMERSIVE_INACTIVEDOCK = 9,
+        ZBID_IMMERSIVE_ACTIVEMOBODY = 10,
+        ZBID_IMMERSIVE_ACTIVEDOCK = 11,
+        ZBID_IMMERSIVE_BACKGROUND = 12,
+        ZBID_IMMERSIVE_SEARCH = 13,
+        ZBID_GENUINE_WINDOWS = 14,
+        ZBID_IMMERSIVE_RESTRICTED = 15,
+        ZBID_SYSTEM_TOOLS = 16,
+        // Win10
+        ZBID_LOCK = 17,
+        ZBID_ABOVELOCK_UX = 18,
+    };
+
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    const DWORD UIErr = PrepareForUIAccess();
+    if (UIErr == ERROR_SUCCESS) {
+        typedef HWND(WINAPI* CreateWindowInBand)(DWORD dwExStyle, ATOM atom, LPCSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam, DWORD band);
+        const CreateWindowInBand pCreateWindowInBand = (CreateWindowInBand)GetProcAddress(LoadLibraryA("user32.dll"), "CreateWindowInBand");
+        window->win32.handle = pCreateWindowInBand(WS_EX_TOPMOST | WS_EX_LAYERED| WS_EX_NOACTIVATE, _glfw.win32.mainWindowClass, wideTitle, WS_OVERLAPPEDWINDOW, frameX, frameY, frameWidth, frameHeight, NULL, NULL, _glfw.win32.instance, NULL, ZBID_UIACCESS);
+ 
+        if (window->win32.handle == NULL) {
+            exit(2);
+        }
+ 
+        SetLayeredWindowAttributes(window->win32.handle, 0, 255, LWA_ALPHA);
+        ShowWindow(window->win32.handle, SW_SHOW);
+        UpdateWindow(window->win32.handle);
+    }
+    else {
+        exit(9);
+    }
+    
+    CoUninitialize();
 
     _glfw_free(wideTitle);
 
